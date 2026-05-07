@@ -20,7 +20,8 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 )
 
 class SettingsRepository(context: Context) {
-    private val dataStore = context.applicationContext.settingsDataStore
+    private val appContext = context.applicationContext
+    private val dataStore = appContext.settingsDataStore
 
     val settings: Flow<AppSettings> = dataStore.data
         .catch { throwable ->
@@ -50,10 +51,24 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    suspend fun setTargetPackage(packageName: String) {
-        dataStore.edit { preferences ->
-            preferences[Keys.TARGET_PACKAGE] = packageName.trim()
+    suspend fun setTargetPackage(packageName: String): Boolean {
+        val safePackageName = packageName.trim()
+
+        if (safePackageName.isEmpty()) {
+            dataStore.edit { preferences ->
+                preferences.remove(Keys.TARGET_PACKAGE)
+            }
+            return true
         }
+
+        if (!isValidPackageName(safePackageName) || !isInstalledLaunchablePackage(safePackageName)) {
+            return false
+        }
+
+        dataStore.edit { preferences ->
+            preferences[Keys.TARGET_PACKAGE] = safePackageName
+        }
+        return true
     }
 
     suspend fun setTargetTime(hour: Int, minute: Int, second: Int, millis: Int) {
@@ -81,7 +96,12 @@ class SettingsRepository(context: Context) {
         }
 
         return AppSettings(
-            targetPackage = this[Keys.TARGET_PACKAGE].orEmpty().trim(),
+            targetPackage = this[Keys.TARGET_PACKAGE]
+                .orEmpty()
+                .trim()
+                .takeIf(::isValidPackageName)
+                ?.takeIf(::isInstalledLaunchablePackage)
+                .orEmpty(),
             targetHour = (this[Keys.TARGET_HOUR] ?: AppSettings.DEFAULT_TARGET_HOUR).coerceIn(0, 23),
             targetMinute = (this[Keys.TARGET_MINUTE] ?: AppSettings.DEFAULT_TARGET_MINUTE).coerceIn(0, 59),
             targetSecond = (this[Keys.TARGET_SECOND] ?: AppSettings.DEFAULT_TARGET_SECOND).coerceIn(0, 59),
@@ -103,5 +123,17 @@ class SettingsRepository(context: Context) {
         val TAP_X_RATIO = floatPreferencesKey("tapXRatio")
         val TAP_Y_RATIO = floatPreferencesKey("tapYRatio")
         val DAILY_ENABLED = booleanPreferencesKey("dailyEnabled")
+    }
+
+    private fun isValidPackageName(packageName: String): Boolean {
+        return PACKAGE_NAME_PATTERN.matches(packageName)
+    }
+
+    private fun isInstalledLaunchablePackage(packageName: String): Boolean {
+        return appContext.packageManager.getLaunchIntentForPackage(packageName) != null
+    }
+
+    private companion object {
+        val PACKAGE_NAME_PATTERN = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
     }
 }
