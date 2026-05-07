@@ -1,0 +1,63 @@
+# Gradle
+.gradle/
+build/
+**/build/
+gradle-app.setting
+
+# Local Android configuration
+local.properties
+*.hprof
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Android generated files
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Kotlin
+.kotlin/
+
+# Lint and reports
+lint-results*.xml
+lint-results*.html
+lint/tmp/
+
+# Keystore and signing files
+*.jks
+*.keystore
+*.p12
+*.pem
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local assistant context and planning
+memory-bank/
+ROADMAP.md
+IMPLEMENTATION_PHASES.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.opencode/
+.windsurf/
+.aider*
