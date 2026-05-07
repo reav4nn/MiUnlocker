@@ -28,7 +28,7 @@ Default timing context:
 
 ## Current Status
 
-The project is currently at **Phase 4: target app selection and permission guidance**.
+The project is currently at **Phase 5: exact alarm and foreground service**.
 
 Implemented:
 - Android/Kotlin Gradle project skeleton.
@@ -38,18 +38,20 @@ Implemented:
 - Manual package input fallback with installed/launchable package validation.
 - Setup guidance for Accessibility settings, exact alarm settings, battery optimization settings, and Android 13+ notification permission.
 - System-only Settings intent resolution to reduce fake settings screen interception risk.
+- Exact alarm scheduling with `AlarmManager.setExactAndAllowWhileIdle`.
+- Private alarm receiver that starts a foreground countdown service.
+- Foreground notification channel showing `Auto tap armed` countdown status.
+- Target app launch attempt 5 seconds before the configured tap time.
+- Daily automation toggle now schedules and cancels the next exact alarm.
 
 Not implemented yet:
-- Exact alarm scheduling.
-- Alarm receiver and foreground service.
-- Target app launch before tap time.
 - AccessibilityService tap execution.
 - Calibration screen.
 - Manual `Test now` workflow.
 - Local logs and diagnostics.
 
 > [!WARNING]
-> The current build can persist settings and guide setup, but it does not schedule alarms, launch Xiaomi Community, or perform any tap automation yet.
+> The current build can schedule an exact alarm, launch the selected target app, and show a foreground countdown. It does not perform the final Accessibility tap yet.
 
 ## Build
 
@@ -86,10 +88,11 @@ Current build setup flow:
 2. Open the setup rows to review Android Accessibility, exact alarm, battery optimization, and notification status.
 3. Select the target app from installed launchable apps, or enter a package name manually.
 4. Choose a timing offset if needed.
-5. Toggle daily automation only if you want the setting persisted for later phases.
+5. Toggle daily automation to schedule the next exact alarm.
+6. Keep the device unlocked and screen ready near the target time.
 
 > [!NOTE]
-> Accessibility settings can be opened now, but the MiUnlocker AccessibilityService is planned for a later phase and is not available in this build.
+> The exact alarm starts a foreground service 5 seconds before the tap time. That lead time is for opening the selected target app; the final tap command is planned for Phase 6.
 
 ## Privacy And Permissions
 
@@ -97,6 +100,8 @@ MiUnlocker is designed as a local-only personal tool.
 
 Current manifest permissions:
 - `android.permission.SCHEDULE_EXACT_ALARM`
+- `android.permission.FOREGROUND_SERVICE`
+- `android.permission.FOREGROUND_SERVICE_SPECIAL_USE`
 - `android.permission.POST_NOTIFICATIONS`
 
 Current package visibility:
@@ -122,6 +127,11 @@ app/src/main/java/com/reavann/miunlocker/
 |   |-- InstalledAppsRepository.kt
 |   |-- SettingsRepository.kt
 |   `-- SetupStatusRepository.kt
+|-- scheduling/
+|   |-- AlarmReceiver.kt
+|   `-- ExactAlarmScheduler.kt
+|-- automation/
+|   `-- TapForegroundService.kt
 `-- ui/
     |-- MainScreen.kt
     |-- MainUiState.kt
@@ -133,13 +143,12 @@ app/src/main/java/com/reavann/miunlocker/
 
 Next planned milestones:
 
-- Phase 5: exact alarm scheduling, alarm receiver, foreground service, and target app launch attempt.
 - Phase 6: AccessibilityService tap engine with node search and coordinate fallback.
 - Phase 7: calibration screen and manual `Test now` mode.
 - Phase 8: local logs and diagnostics.
 - Phase 9: final reliability polish and release verification.
 
-Before Phase 5, offset semantics need to be clarified: whether offsets are relative to `19:59:59.800` or absolute around `20:00:00.000`.
+Phase 5 applies offsets relative to the stored base target time. The alarm trigger is scheduled 5 seconds before the final tap time so app launch delay is handled separately from the tap moment.
 
 ## Troubleshooting
 
@@ -147,6 +156,7 @@ Before Phase 5, offset semantics need to be clarified: whether offsets are relat
 - If exact alarm status stays blocked, check Android special app access settings for alarms and reminders.
 - If notification status is blocked on Android 13+, grant notification permission from the app setup row or Android app settings.
 - If battery optimization remains active, adjust the device manufacturer's battery/background restrictions manually.
+- If the foreground notification does not appear, check notification permission and app notification settings.
 
 ## Verification
 

@@ -398,12 +398,12 @@ private fun PhaseNoticeCard() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Phase 4: target app and setup guidance",
+                text = "Phase 5: exact alarm and foreground service",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "No alarm scheduling, app launch, Accessibility tap execution, calibration, or logs are active yet.",
+                text = "Daily alarms can start the foreground countdown and launch the target app. Accessibility tap execution, calibration, and logs are still later phases.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -431,7 +431,7 @@ private fun StatusSection(
         StatusActionRow(
             label = "Exact alarm permission",
             value = uiState.exactAlarmStatusText,
-            supportingText = "Required on Android 12+ before Phase 5 can schedule exact daily alarms.",
+            supportingText = "Required on Android 12+ to schedule the daily foreground countdown alarm.",
             actionLabel = "Open Exact Alarm Settings",
             actionEnabled = uiState.setupStatus.exactAlarmPermissionRequired,
             onAction = onOpenExactAlarmSettings,
@@ -458,7 +458,7 @@ private fun StatusSection(
         StatusActionRow(
             label = "Selected target app",
             value = uiState.selectedTargetAppText,
-            supportingText = "Pick Xiaomi Community or another launchable package. Automation remains inactive until later phases.",
+            supportingText = "The foreground service opens this package 5 seconds before the configured tap time.",
             actionLabel = if (uiState.settings.targetPackage.isBlank()) {
                 "Select Target App"
             } else {
@@ -484,7 +484,7 @@ private fun TimingSection(
         InfoRow(
             label = "Stored offset",
             value = formatSignedMillis(settings.offsetMillis),
-            supportingText = "Final effective-time calculation is implemented in the scheduler phase.",
+            supportingText = "Offset is applied to the base target time before scheduling.",
         )
         Row(
             modifier = Modifier
@@ -537,10 +537,30 @@ private fun AutomationSection(
             Switch(
                 checked = uiState.settings.dailyEnabled,
                 onCheckedChange = onDailyEnabledChange,
+                enabled = uiState.canChangeDailyAutomation,
             )
         }
+        if (uiState.scheduleState.schedulingError != null) {
+            Text(
+                text = uiState.scheduleState.schedulingError,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        HorizontalDivider()
+        InfoRow(
+            label = "Next tap time",
+            value = uiState.nextTapTimeText,
+            supportingText = "This is the final target time after applying the stored offset.",
+        )
+        HorizontalDivider()
+        InfoRow(
+            label = "Foreground service starts",
+            value = uiState.foregroundStartTimeText,
+            supportingText = "The selected target app is launched 5 seconds before tap time to reduce app-open delay.",
+        )
         Text(
-            text = "This toggle is persisted now. Actual scheduling starts in Phase 5.",
+            text = uiState.dailyAutomationSupportingText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

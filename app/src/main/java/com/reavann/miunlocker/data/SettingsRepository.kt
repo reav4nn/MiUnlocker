@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -32,6 +33,8 @@ class SettingsRepository(context: Context) {
             }
         }
         .map { preferences -> preferences.toAppSettings() }
+
+    suspend fun getCurrentSettings(): AppSettings = settings.first()
 
     suspend fun setOffsetMillis(offsetMillis: Int) {
         val safeOffset = if (offsetMillis in AppSettings.ALLOWED_OFFSETS_MILLIS) {
