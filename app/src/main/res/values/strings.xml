@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MiUnlocker</string>
+    <string name="logo_content_description">MiUnlocker logo</string>
+    <string name="unofficial_notice">Unofficial personal automation tool. Not affiliated with Xiaomi.</string>
 </resources>
