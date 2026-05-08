@@ -15,16 +15,26 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.reavann.miunlocker.MainActivity
 import com.reavann.miunlocker.R
+import com.reavann.miunlocker.data.SettingsRepository
+import com.reavann.miunlocker.scheduling.ExactAlarmScheduler
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class TapForegroundService : Service() {
     private val handler = Handler(Looper.getMainLooper())
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var targetTapEpochMillis: Long = 0L
     private var targetPackage: String = ""
     private var launchAttempted = false
     private var launchStatusText = "Opening selected target app."
+    private var tapCommandSent = false
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -42,6 +52,9 @@ class TapForegroundService : Service() {
 
         targetTapEpochMillis = intent.getLongExtra(EXTRA_TARGET_TAP_EPOCH_MILLIS, 0L)
         targetPackage = intent.getStringExtra(EXTRA_TARGET_PACKAGE).orEmpty()
+        launchAttempted = false
+        launchStatusText = "Opening selected target app."
+        tapCommandSent = false
 
         if (targetTapEpochMillis <= 0L || targetPackage.isBlank()) {
             startFallbackForegroundAndStop()
@@ -67,6 +80,7 @@ class TapForegroundService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -87,15 +101,7 @@ class TapForegroundService : Service() {
         val remainingMillis = targetTapEpochMillis - System.currentTimeMillis()
 
         if (remainingMillis <= 0L) {
-            notificationManager.notify(
-                NOTIFICATION_ID,
-                buildNotification(
-                    title = "Tap time reached",
-                    text = "Accessibility tap execution is implemented in Phase 6.",
-                    ongoing = false,
-                ),
-            )
-            handler.postDelayed({ stopSelf() }, STOP_AFTER_TARGET_MILLIS)
+            sendTapCommandOnce()
             return
         }
 
@@ -132,6 +138,71 @@ class TapForegroundService : Service() {
         }.onFailure {
             launchStatusText = "Target app launch failed."
         }
+    }
+
+    private fun sendTapCommandOnce() {
+        if (tapCommandSent) return
+        tapCommandSent = true
+        handler.removeCallbacks(tickRunnable)
+
+        notificationManager.notify(
+            NOTIFICATION_ID,
+            buildNotification(
+                title = "Tap time reached",
+                text = "Sending Accessibility tap command.",
+                ongoing = true,
+            ),
+        )
+
+        serviceScope.launch {
+            val result = buildTapCommandResult()
+            notificationManager.notify(
+                NOTIFICATION_ID,
+                buildNotification(
+                    title = result.title,
+                    text = result.text,
+                    ongoing = false,
+                ),
+            )
+            handler.postDelayed({ stopSelf() }, STOP_AFTER_TARGET_MILLIS)
+        }
+    }
+
+    private suspend fun buildTapCommandResult(): TapExecutionResult {
+        val settings = withContext(Dispatchers.IO) {
+            SettingsRepository(this@TapForegroundService).getCurrentSettings()
+        }
+
+        if (!settings.dailyEnabled) {
+            return TapExecutionResult(
+                title = "Tap skipped",
+                text = "Daily automation was disabled before tap time.",
+            )
+        }
+
+        if (settings.targetPackage != targetPackage) {
+            return TapExecutionResult(
+                title = "Tap skipped",
+                text = "Selected target changed before tap time.",
+            )
+        }
+
+        val currentScheduledTap = ExactAlarmScheduler(this).previewNext(
+            settings = settings,
+            afterMillis = targetTapEpochMillis - 1L,
+        )
+        if (currentScheduledTap?.targetTapEpochMillis != targetTapEpochMillis) {
+            return TapExecutionResult(
+                title = "Tap skipped",
+                text = "Scheduled tap time changed before execution.",
+            )
+        }
+
+        return MiUnlockAccessibilityService.executeTapCommand(
+            targetPackage = settings.targetPackage,
+            xRatio = settings.tapXRatio,
+            yRatio = settings.tapYRatio,
+        )
     }
 
     private fun buildNotification(

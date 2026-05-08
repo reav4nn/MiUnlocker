@@ -3,4 +3,6 @@
     <string name="app_name">MiUnlocker</string>
     <string name="logo_content_description">MiUnlocker logo</string>
     <string name="unofficial_notice">Unofficial personal automation tool. Not affiliated with Xiaomi.</string>
+    <string name="accessibility_service_label">MiUnlocker tap service</string>
+    <string name="accessibility_service_description">Allows MiUnlocker to tap the selected target app only after you arm automation or run a manual test.</string>
 </resources>

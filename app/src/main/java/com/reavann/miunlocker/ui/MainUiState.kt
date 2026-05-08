@@ -43,8 +43,8 @@ data class MainUiState(
             settings.targetPackage.isBlank() -> "Select a target app before arming daily automation."
             !setupStatus.exactAlarmAllowed -> "Grant exact alarm permission before arming daily automation."
             scheduleState.schedulingError != null -> scheduleState.schedulingError
-            settings.dailyEnabled -> "The exact alarm starts the foreground service 5 seconds before the tap time."
-            else -> "Arming schedules the next exact alarm using the selected target app and offset."
+            settings.dailyEnabled -> "The exact alarm starts the foreground service, launches the target app, and sends the Accessibility tap command."
+            else -> "Arming schedules the next exact alarm using the selected target app, offset, and saved tap ratios."
         }
 
     val canChangeDailyAutomation: Boolean

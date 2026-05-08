@@ -20,7 +20,7 @@ class SetupStatusRepository(context: Context) {
         return SetupStatusSnapshot(
             accessibilityEnabled = isAccessibilityServiceEnabled(),
             exactAlarmPermissionRequired = exactAlarmRequired,
-            exactAlarmAllowed = !exactAlarmRequired || canScheduleExactAlarms(),
+            exactAlarmAllowed = canScheduleExactAlarms(),
             batteryOptimizationIgnored = isIgnoringBatteryOptimizations(),
             notificationPermissionRequired = notificationRequired,
             notificationPermissionGranted = !notificationRequired || isNotificationPermissionGranted(),
@@ -28,6 +28,8 @@ class SetupStatusRepository(context: Context) {
     }
 
     private fun canScheduleExactAlarms(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+
         val alarmManager = appContext.getSystemService(AlarmManager::class.java)
         return alarmManager?.canScheduleExactAlarms() == true
     }

@@ -398,12 +398,12 @@ private fun PhaseNoticeCard() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Phase 5: exact alarm and foreground service",
+                text = "Phase 6: Accessibility tap engine",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Daily alarms can start the foreground countdown and launch the target app. Accessibility tap execution, calibration, and logs are still later phases.",
+                text = "Daily alarms can launch the target app, then command the Accessibility service to click Apply for unlocking or use the saved coordinate fallback.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -423,7 +423,7 @@ private fun StatusSection(
         StatusActionRow(
             label = "Accessibility service",
             value = uiState.accessibilityStatusText,
-            supportingText = "Open Android Accessibility settings. The MiUnlocker service itself is implemented in Phase 6.",
+            supportingText = "Enable the MiUnlocker tap service so scheduled commands can inspect and tap only the selected target app.",
             actionLabel = "Open Accessibility Settings",
             onAction = onOpenAccessibilitySettings,
         )
@@ -504,7 +504,7 @@ private fun TimingSection(
         InfoRow(
             label = "Fallback tap position",
             value = "x=${settings.tapXRatio.formatRatio()}, y=${settings.tapYRatio.formatRatio()}",
-            supportingText = "Calibration screen is planned for Phase 7. Defaults are x=0.50, y=0.89.",
+            supportingText = "Used if the Apply for unlocking node is not found or is not clickable. Calibration screen is planned for Phase 7.",
         )
     }
 }

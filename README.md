@@ -28,7 +28,7 @@ Default timing context:
 
 ## Current Status
 
-The project is currently at **Phase 5: exact alarm and foreground service**.
+The project is currently at **Phase 6: Accessibility tap engine**.
 
 Implemented:
 - Android/Kotlin Gradle project skeleton.
@@ -43,15 +43,18 @@ Implemented:
 - Foreground notification channel showing `Auto tap armed` countdown status.
 - Target app launch attempt 5 seconds before the configured tap time.
 - Daily automation toggle now schedules and cancels the next exact alarm.
+- AccessibilityService registration and setup status detection.
+- Explicit foreground-service command to tap at the configured target time.
+- Active-window package restriction before any tap is attempted.
+- Node-first tap strategy for `Apply for unlocking`, with saved-ratio coordinate fallback.
 
 Not implemented yet:
-- AccessibilityService tap execution.
 - Calibration screen.
 - Manual `Test now` workflow.
 - Local logs and diagnostics.
 
 > [!WARNING]
-> The current build can schedule an exact alarm, launch the selected target app, and show a foreground countdown. It does not perform the final Accessibility tap yet.
+> The current build can perform the scheduled Accessibility tap only when the service is enabled, the selected target app is active, and the device state allows Accessibility gestures. It still does not include calibration, manual test mode, or logs.
 
 ## Build
 
@@ -86,13 +89,14 @@ Current build setup flow:
 
 1. Install and open MiUnlocker.
 2. Open the setup rows to review Android Accessibility, exact alarm, battery optimization, and notification status.
-3. Select the target app from installed launchable apps, or enter a package name manually.
-4. Choose a timing offset if needed.
-5. Toggle daily automation to schedule the next exact alarm.
-6. Keep the device unlocked and screen ready near the target time.
+3. Enable the MiUnlocker tap service in Android Accessibility settings.
+4. Select the target app from installed launchable apps, or enter a package name manually.
+5. Choose a timing offset if needed.
+6. Toggle daily automation to schedule the next exact alarm.
+7. Keep the device unlocked and screen ready near the target time.
 
 > [!NOTE]
-> The exact alarm starts a foreground service 5 seconds before the tap time. That lead time is for opening the selected target app; the final tap command is planned for Phase 6.
+> The exact alarm starts a foreground service 5 seconds before the tap time. The service opens the selected target app, then sends the tap command at the configured target time.
 
 ## Privacy And Permissions
 
@@ -107,6 +111,10 @@ Current manifest permissions:
 Current package visibility:
 - Launcher-app visibility query for target app selection.
 - No `QUERY_ALL_PACKAGES` permission.
+
+Accessibility capability:
+- MiUnlocker declares an Accessibility service protected by `android.permission.BIND_ACCESSIBILITY_SERVICE`.
+- The service only taps after an explicit in-process command from MiUnlocker and skips work unless the active window package matches the selected target app.
 
 Explicitly not requested:
 - No `INTERNET` permission.
@@ -131,6 +139,7 @@ app/src/main/java/com/reavann/miunlocker/
 |   |-- AlarmReceiver.kt
 |   `-- ExactAlarmScheduler.kt
 |-- automation/
+|   |-- MiUnlockAccessibilityService.kt
 |   `-- TapForegroundService.kt
 `-- ui/
     |-- MainScreen.kt
@@ -143,7 +152,6 @@ app/src/main/java/com/reavann/miunlocker/
 
 Next planned milestones:
 
-- Phase 6: AccessibilityService tap engine with node search and coordinate fallback.
 - Phase 7: calibration screen and manual `Test now` mode.
 - Phase 8: local logs and diagnostics.
 - Phase 9: final reliability polish and release verification.
@@ -157,6 +165,8 @@ Phase 5 applies offsets relative to the stored base target time. The alarm trigg
 - If notification status is blocked on Android 13+, grant notification permission from the app setup row or Android app settings.
 - If battery optimization remains active, adjust the device manufacturer's battery/background restrictions manually.
 - If the foreground notification does not appear, check notification permission and app notification settings.
+- If the notification says the tap was skipped, confirm the MiUnlocker Accessibility service is enabled and the selected target app is the active foreground app.
+- If the node is not found, Phase 6 falls back to the saved coordinate ratios; Phase 7 will add calibration controls.
 
 ## Verification
 
@@ -164,6 +174,7 @@ Latest local checks performed:
 
 ```bash
 ./gradlew :app:assembleDebug
+./gradlew :app:lintDebug
 ```
 
 The manifest was also checked for forbidden network and personal-data permissions; none were found.
