@@ -24,6 +24,7 @@ data class AppSettings(
         )
 
     companion object {
+        const val DEFAULT_TARGET_PACKAGE = "com.mi.global.bbs"
         const val DEFAULT_TARGET_HOUR = 19
         const val DEFAULT_TARGET_MINUTE = 59
         const val DEFAULT_TARGET_SECOND = 59

@@ -1,7 +1,6 @@
 package com.reavann.miunlocker.data
 
 import android.Manifest
-import android.app.AlarmManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -9,6 +8,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import com.reavann.miunlocker.scheduling.canScheduleExactAlarmsCompat
 
 class SetupStatusRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -20,18 +20,11 @@ class SetupStatusRepository(context: Context) {
         return SetupStatusSnapshot(
             accessibilityEnabled = isAccessibilityServiceEnabled(),
             exactAlarmPermissionRequired = exactAlarmRequired,
-            exactAlarmAllowed = canScheduleExactAlarms(),
+            exactAlarmAllowed = appContext.canScheduleExactAlarmsCompat(),
             batteryOptimizationIgnored = isIgnoringBatteryOptimizations(),
             notificationPermissionRequired = notificationRequired,
             notificationPermissionGranted = !notificationRequired || isNotificationPermissionGranted(),
         )
-    }
-
-    private fun canScheduleExactAlarms(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-
-        val alarmManager = appContext.getSystemService(AlarmManager::class.java)
-        return alarmManager?.canScheduleExactAlarms() == true
     }
 
     private fun isIgnoringBatteryOptimizations(): Boolean {

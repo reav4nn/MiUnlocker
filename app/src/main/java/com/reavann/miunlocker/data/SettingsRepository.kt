@@ -60,6 +60,7 @@ class SettingsRepository(context: Context) {
         if (safePackageName.isEmpty()) {
             dataStore.edit { preferences ->
                 preferences.remove(Keys.TARGET_PACKAGE)
+                preferences[Keys.TARGET_EXPLICITLY_CLEARED] = true
             }
             return true
         }
@@ -70,6 +71,7 @@ class SettingsRepository(context: Context) {
 
         dataStore.edit { preferences ->
             preferences[Keys.TARGET_PACKAGE] = safePackageName
+            preferences[Keys.TARGET_EXPLICITLY_CLEARED] = false
         }
         return true
     }
@@ -85,8 +87,8 @@ class SettingsRepository(context: Context) {
 
     suspend fun setTapRatios(xRatio: Float, yRatio: Float) {
         dataStore.edit { preferences ->
-            preferences[Keys.TAP_X_RATIO] = xRatio.coerceIn(0f, 1f)
-            preferences[Keys.TAP_Y_RATIO] = yRatio.coerceIn(0f, 1f)
+            preferences[Keys.TAP_X_RATIO] = xRatio.safeRatio(AppSettings.DEFAULT_TAP_X_RATIO)
+            preferences[Keys.TAP_Y_RATIO] = yRatio.safeRatio(AppSettings.DEFAULT_TAP_Y_RATIO)
         }
     }
 
@@ -98,9 +100,17 @@ class SettingsRepository(context: Context) {
             AppSettings.DEFAULT_OFFSET_MILLIS
         }
 
+        val rawTargetPackage = this[Keys.TARGET_PACKAGE]
+        val explicitlyCleared = this[Keys.TARGET_EXPLICITLY_CLEARED] == true
+
+        val resolvedTargetPackage = when {
+            rawTargetPackage != null -> rawTargetPackage
+            explicitlyCleared -> ""
+            else -> AppSettings.DEFAULT_TARGET_PACKAGE
+        }
+
         return AppSettings(
-            targetPackage = this[Keys.TARGET_PACKAGE]
-                .orEmpty()
+            targetPackage = resolvedTargetPackage
                 .trim()
                 .takeIf(::isValidPackageName)
                 ?.takeIf(::isInstalledLaunchablePackage)
@@ -110,14 +120,25 @@ class SettingsRepository(context: Context) {
             targetSecond = (this[Keys.TARGET_SECOND] ?: AppSettings.DEFAULT_TARGET_SECOND).coerceIn(0, 59),
             targetMillis = (this[Keys.TARGET_MILLIS] ?: AppSettings.DEFAULT_TARGET_MILLIS).coerceIn(0, 999),
             offsetMillis = safeOffset,
-            tapXRatio = (this[Keys.TAP_X_RATIO] ?: AppSettings.DEFAULT_TAP_X_RATIO).coerceIn(0f, 1f),
-            tapYRatio = (this[Keys.TAP_Y_RATIO] ?: AppSettings.DEFAULT_TAP_Y_RATIO).coerceIn(0f, 1f),
+            tapXRatio = (this[Keys.TAP_X_RATIO] ?: AppSettings.DEFAULT_TAP_X_RATIO)
+                .safeRatio(AppSettings.DEFAULT_TAP_X_RATIO),
+            tapYRatio = (this[Keys.TAP_Y_RATIO] ?: AppSettings.DEFAULT_TAP_Y_RATIO)
+                .safeRatio(AppSettings.DEFAULT_TAP_Y_RATIO),
             dailyEnabled = this[Keys.DAILY_ENABLED] ?: AppSettings.DEFAULT_DAILY_ENABLED,
         )
     }
 
+    private fun Float.safeRatio(defaultValue: Float): Float {
+        return if (isNaN() || isInfinite()) {
+            defaultValue
+        } else {
+            coerceIn(0f, 1f)
+        }
+    }
+
     private object Keys {
         val TARGET_PACKAGE = stringPreferencesKey("targetPackage")
+        val TARGET_EXPLICITLY_CLEARED = booleanPreferencesKey("targetExplicitlyCleared")
         val TARGET_HOUR = intPreferencesKey("targetHour")
         val TARGET_MINUTE = intPreferencesKey("targetMinute")
         val TARGET_SECOND = intPreferencesKey("targetSecond")

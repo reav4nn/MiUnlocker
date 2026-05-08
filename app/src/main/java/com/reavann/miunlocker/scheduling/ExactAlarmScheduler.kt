@@ -10,13 +10,17 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+fun Context.canScheduleExactAlarmsCompat(): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+        getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == true
+}
+
 class ExactAlarmScheduler(context: Context) {
     private val appContext = context.applicationContext
     private val alarmManager = appContext.getSystemService(AlarmManager::class.java)
 
     fun canScheduleExactAlarms(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager?.canScheduleExactAlarms() == true
+        return appContext.canScheduleExactAlarmsCompat()
     }
 
     fun previewNext(
@@ -29,7 +33,7 @@ class ExactAlarmScheduler(context: Context) {
 
         return ScheduledTap(
             targetTapEpochMillis = targetTapMillis,
-            alarmTriggerEpochMillis = targetTapMillis - LAUNCH_LEAD_MILLIS,
+            alarmTriggerEpochMillis = targetTapMillis - PREPARATION_LEAD_MILLIS,
             targetPackage = targetPackage,
         )
     }
@@ -113,7 +117,7 @@ class ExactAlarmScheduler(context: Context) {
         const val ACTION_START_TAP_WINDOW = "com.reavann.miunlocker.action.START_TAP_WINDOW"
         const val EXTRA_TARGET_TAP_EPOCH_MILLIS = "targetTapEpochMillis"
         const val EXTRA_TARGET_PACKAGE = "targetPackage"
-        const val LAUNCH_LEAD_MILLIS = 5_000L
+        const val PREPARATION_LEAD_MILLIS = 120_000L
 
         private const val REQUEST_CODE_DAILY_TAP = 2001
         private const val NANOS_PER_MILLI = 1_000_000

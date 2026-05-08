@@ -22,6 +22,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -34,7 +35,10 @@ class TapForegroundService : Service() {
     private var targetPackage: String = ""
     private var launchAttempted = false
     private var launchStatusText = "Opening selected target app."
+    private var preparationStatusText = "Waiting to prepare unlock page."
     private var tapCommandSent = false
+    private val preparationLock = Any()
+    private var preparationJob: Job? = null
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -54,7 +58,12 @@ class TapForegroundService : Service() {
         targetPackage = intent.getStringExtra(EXTRA_TARGET_PACKAGE).orEmpty()
         launchAttempted = false
         launchStatusText = "Opening selected target app."
+        preparationStatusText = "Waiting to prepare unlock page."
         tapCommandSent = false
+        synchronized(preparationLock) {
+            preparationJob?.cancel()
+            preparationJob = null
+        }
 
         if (targetTapEpochMillis <= 0L || targetPackage.isBlank()) {
             startFallbackForegroundAndStop()
@@ -72,6 +81,7 @@ class TapForegroundService : Service() {
         )
 
         launchTargetAppOnce()
+        prepareUnlockPageOnce()
         handler.removeCallbacks(tickRunnable)
         handler.post(tickRunnable)
 
@@ -80,6 +90,7 @@ class TapForegroundService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        synchronized(preparationLock) { preparationJob?.cancel() }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -109,7 +120,7 @@ class TapForegroundService : Service() {
             NOTIFICATION_ID,
             buildNotification(
                 title = "Auto tap armed",
-                text = "$launchStatusText ${formatRemaining(remainingMillis)} until target time.",
+                text = "$launchStatusText $preparationStatusText ${formatRemaining(remainingMillis)} until target time.",
                 ongoing = true,
             ),
         )
@@ -140,9 +151,38 @@ class TapForegroundService : Service() {
         }
     }
 
+    private fun prepareUnlockPageOnce() {
+        synchronized(preparationLock) {
+            if (preparationJob != null) return
+
+            preparationJob = serviceScope.launch {
+                preparationStatusText = "Preparing Xiaomi Community unlock page."
+                val timeoutMillis = (targetTapEpochMillis - System.currentTimeMillis() - FINAL_TAP_GUARD_MILLIS)
+                    .coerceAtLeast(0L)
+                val result = MiUnlockAccessibilityService.prepareUnlockPageCommand(
+                    targetPackage = targetPackage,
+                    timeoutMillis = timeoutMillis,
+                )
+                preparationStatusText = when {
+                    result.readyForFinalTap -> "Unlock page ready."
+                    else -> "Preparation result: ${result.title}."
+                }
+                notificationManager.notify(
+                    NOTIFICATION_ID,
+                    buildNotification(
+                        title = "Auto tap armed",
+                        text = preparationStatusText,
+                        ongoing = true,
+                    ),
+                )
+            }
+        }
+    }
+
     private fun sendTapCommandOnce() {
         if (tapCommandSent) return
         tapCommandSent = true
+        synchronized(preparationLock) { preparationJob?.cancel() }
         handler.removeCallbacks(tickRunnable)
 
         notificationManager.notify(
@@ -256,6 +296,7 @@ class TapForegroundService : Service() {
         private const val MAX_TICK_MILLIS = 1_000L
         private const val MIN_TICK_MILLIS = 50L
         private const val STOP_AFTER_TARGET_MILLIS = 5_000L
+        private const val FINAL_TAP_GUARD_MILLIS = 800L
 
         fun start(
             context: Context,

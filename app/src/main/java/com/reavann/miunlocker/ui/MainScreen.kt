@@ -11,15 +11,19 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,6 +51,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -75,6 +82,7 @@ fun MainRoute(
         viewModel.refreshSetupStatus()
     }
     var showAppPicker by rememberSaveable { mutableStateOf(false) }
+    var showCalibration by rememberSaveable { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshSetupStatus()
@@ -83,13 +91,23 @@ fun MainRoute(
     MainScreen(
         uiState = uiState,
         showAppPicker = showAppPicker,
+        showCalibration = showCalibration,
         onOffsetSelected = viewModel::onOffsetSelected,
+        onTapRatiosChanged = viewModel::onTapRatiosChanged,
+        onTapRatiosReset = viewModel::onTapRatiosReset,
+        onTestNow = viewModel::onTestNow,
         onDailyEnabledChange = viewModel::onDailyEnabledChange,
         onShowAppPicker = {
+            showCalibration = false
             showAppPicker = true
             viewModel.refreshInstalledApps()
         },
         onBackFromAppPicker = { showAppPicker = false },
+        onShowCalibration = {
+            showAppPicker = false
+            showCalibration = true
+        },
+        onBackFromCalibration = { showCalibration = false },
         onManualPackageInputChange = viewModel::onManualPackageInputChange,
         onManualPackageSubmitted = viewModel::onManualPackageSubmitted,
         onTargetPackageSelected = viewModel::onTargetPackageSelected,
@@ -118,10 +136,16 @@ fun MainRoute(
 fun MainScreen(
     uiState: MainUiState,
     showAppPicker: Boolean,
+    showCalibration: Boolean,
     onOffsetSelected: (Int) -> Unit,
+    onTapRatiosChanged: (Float, Float) -> Unit,
+    onTapRatiosReset: () -> Unit,
+    onTestNow: () -> Unit,
     onDailyEnabledChange: (Boolean) -> Unit,
     onShowAppPicker: () -> Unit,
     onBackFromAppPicker: () -> Unit,
+    onShowCalibration: () -> Unit,
+    onBackFromCalibration: () -> Unit,
     onManualPackageInputChange: (String) -> Unit,
     onManualPackageSubmitted: () -> Unit,
     onTargetPackageSelected: (String) -> Unit,
@@ -142,12 +166,22 @@ fun MainScreen(
             onClearTargetPackage = onClearTargetPackage,
             modifier = modifier,
         )
+    } else if (showCalibration) {
+        CalibrationScreen(
+            settings = uiState.settings,
+            onBack = onBackFromCalibration,
+            onTapRatiosChanged = onTapRatiosChanged,
+            onTapRatiosReset = onTapRatiosReset,
+            modifier = modifier,
+        )
     } else {
         MainDashboardScreen(
             uiState = uiState,
             onOffsetSelected = onOffsetSelected,
             onDailyEnabledChange = onDailyEnabledChange,
             onShowAppPicker = onShowAppPicker,
+            onShowCalibration = onShowCalibration,
+            onTestNow = onTestNow,
             onOpenAccessibilitySettings = onOpenAccessibilitySettings,
             onOpenExactAlarmSettings = onOpenExactAlarmSettings,
             onOpenBatteryOptimizationSettings = onOpenBatteryOptimizationSettings,
@@ -163,6 +197,8 @@ private fun MainDashboardScreen(
     onOffsetSelected: (Int) -> Unit,
     onDailyEnabledChange: (Boolean) -> Unit,
     onShowAppPicker: () -> Unit,
+    onShowCalibration: () -> Unit,
+    onTestNow: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenExactAlarmSettings: () -> Unit,
     onOpenBatteryOptimizationSettings: () -> Unit,
@@ -196,7 +232,11 @@ private fun MainDashboardScreen(
                 uiState = uiState,
                 onDailyEnabledChange = onDailyEnabledChange,
             )
-            FutureActionsSection()
+            ActionsSection(
+                uiState = uiState,
+                onShowCalibration = onShowCalibration,
+                onTestNow = onTestNow,
+            )
         }
     }
 }
@@ -356,6 +396,201 @@ private fun AppPickerScreen(
 }
 
 @Composable
+private fun CalibrationScreen(
+    settings: AppSettings,
+    onBack: () -> Unit,
+    onTapRatiosChanged: (Float, Float) -> Unit,
+    onTapRatiosReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(modifier = modifier) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(innerPadding)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Calibrate tap position",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Set the fallback coordinate used when the Apply button node is unavailable.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onBack) {
+                    Text(text = "Back")
+                }
+            }
+
+            SectionCard(title = "Fallback Coordinate") {
+                InfoRow(
+                    label = "Saved tap ratios",
+                    value = "x=${settings.tapXRatio.formatRatio()}, y=${settings.tapYRatio.formatRatio()}",
+                    supportingText = "Ratios are relative to the full display: x=0 is left, x=1 is right, y=0 is top, y=1 is bottom.",
+                )
+                CalibrationPreview(
+                    xRatio = settings.tapXRatio,
+                    yRatio = settings.tapYRatio,
+                    onTapRatiosChanged = onTapRatiosChanged,
+                )
+                RatioSlider(
+                    label = "Horizontal position",
+                    value = settings.tapXRatio,
+                    onValueChange = { xRatio ->
+                        onTapRatiosChanged(xRatio, settings.tapYRatio)
+                    },
+                )
+                RatioSlider(
+                    label = "Vertical position",
+                    value = settings.tapYRatio,
+                    onValueChange = { yRatio ->
+                        onTapRatiosChanged(settings.tapXRatio, yRatio)
+                    },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onTapRatiosReset,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = "Reset defaults")
+                    }
+                    Button(
+                        onClick = onBack,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(text = "Use position")
+                    }
+                }
+                Text(
+                    text = "Use Test now after calibration to verify the fallback point on the real target screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalibrationPreview(
+    xRatio: Float,
+    yRatio: Float,
+    onTapRatiosChanged: (Float, Float) -> Unit,
+) {
+    val markerColor = MaterialTheme.colorScheme.primary
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val safeX = xRatio.coerceIn(0f, 1f)
+    val safeY = yRatio.coerceIn(0f, 1f)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(420.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        if (size.width > 0 && size.height > 0) {
+                            onTapRatiosChanged(
+                                (offset.x / size.width).coerceIn(0f, 1f),
+                                (offset.y / size.height).coerceIn(0f, 1f),
+                            )
+                        }
+                    }
+                },
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val x = size.width * safeX
+                val y = size.height * safeY
+                val thinStroke = 1.dp.toPx()
+                val markerStroke = 2.dp.toPx()
+
+                drawLine(
+                    color = gridColor,
+                    start = Offset(size.width / 2f, 0f),
+                    end = Offset(size.width / 2f, size.height),
+                    strokeWidth = thinStroke,
+                )
+                drawLine(
+                    color = gridColor,
+                    start = Offset(0f, size.height / 2f),
+                    end = Offset(size.width, size.height / 2f),
+                    strokeWidth = thinStroke,
+                )
+                drawLine(
+                    color = markerColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = markerStroke,
+                )
+                drawLine(
+                    color = markerColor,
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = markerStroke,
+                )
+                drawCircle(
+                    color = markerColor,
+                    radius = 8.dp.toPx(),
+                    center = Offset(x, y),
+                )
+            }
+            Text(
+                text = "Tap preview to move marker",
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(12.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RatioSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        InfoRow(
+            label = label,
+            value = value.formatRatio(),
+            supportingText = "Drag to adjust between 0.00 and 1.00.",
+        )
+        Slider(
+            value = value.coerceIn(0f, 1f),
+            onValueChange = onValueChange,
+            valueRange = 0f..1f,
+        )
+    }
+}
+
+@Composable
 private fun HeaderCard() {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -398,12 +633,12 @@ private fun PhaseNoticeCard() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Phase 6: Accessibility tap engine",
+                text = "Phase 7: Calibration and manual test mode",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Daily alarms can launch the target app, then command the Accessibility service to click Apply for unlocking or use the saved coordinate fallback.",
+                text = "The app prepares Xiaomi Community first: dismisses the notification prompt, opens ME, waits for Unlock bootloader, then taps Apply at the target time.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -448,7 +683,7 @@ private fun StatusSection(
         StatusActionRow(
             label = "Notifications",
             value = uiState.notificationStatusText,
-            supportingText = "Android 13+ requires notification permission before the Phase 5 foreground status can be visible.",
+            supportingText = "Android 13+ requires notification permission before foreground countdown status can be visible.",
             actionLabel = "Request Notification Permission",
             actionEnabled = uiState.setupStatus.notificationPermissionRequired &&
                 !uiState.setupStatus.notificationPermissionGranted,
@@ -458,7 +693,7 @@ private fun StatusSection(
         StatusActionRow(
             label = "Selected target app",
             value = uiState.selectedTargetAppText,
-            supportingText = "The foreground service opens this package 5 seconds before the configured tap time.",
+            supportingText = "The foreground service opens this package before the configured tap time and prepares the unlock page.",
             actionLabel = if (uiState.settings.targetPackage.isBlank()) {
                 "Select Target App"
             } else {
@@ -504,7 +739,7 @@ private fun TimingSection(
         InfoRow(
             label = "Fallback tap position",
             value = "x=${settings.tapXRatio.formatRatio()}, y=${settings.tapYRatio.formatRatio()}",
-            supportingText = "Used if the Apply for unlocking node is not found or is not clickable. Calibration screen is planned for Phase 7.",
+            supportingText = "Used only after Apply for unlocking is visible but not directly clickable. Open calibration to adjust these ratios.",
         )
     }
 }
@@ -557,7 +792,7 @@ private fun AutomationSection(
         InfoRow(
             label = "Foreground service starts",
             value = uiState.foregroundStartTimeText,
-            supportingText = "The selected target app is launched 5 seconds before tap time to reduce app-open delay.",
+            supportingText = "The selected target app is launched about 2 minutes before tap time so server-loaded unlock UI can appear.",
         )
         Text(
             text = uiState.dailyAutomationSupportingText,
@@ -568,22 +803,35 @@ private fun AutomationSection(
 }
 
 @Composable
-private fun FutureActionsSection() {
-    SectionCard(title = "Later Actions") {
+private fun ActionsSection(
+    uiState: MainUiState,
+    onShowCalibration: () -> Unit,
+    onTestNow: () -> Unit,
+) {
+    SectionCard(title = "Actions") {
         OutlinedButton(
-            onClick = {},
-            enabled = false,
+            onClick = onShowCalibration,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(text = "Calibrate tap position - Phase 7")
+            Text(text = "Calibrate tap position")
         }
         Button(
-            onClick = {},
-            enabled = false,
+            onClick = onTestNow,
+            enabled = uiState.canRunManualTest,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(text = "Test now - Phase 7")
+            Text(text = uiState.manualTestButtonText)
         }
+        Text(
+            text = uiState.manualTestSupportingText,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (uiState.manualTestState.resultTitle == "Test skipped") {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        HorizontalDivider()
         OutlinedButton(
             onClick = {},
             enabled = false,
@@ -766,10 +1014,16 @@ private fun MainScreenPreview() {
         MainScreen(
             uiState = MainUiState(),
             showAppPicker = false,
+            showCalibration = false,
             onOffsetSelected = {},
+            onTapRatiosChanged = { _, _ -> },
+            onTapRatiosReset = {},
+            onTestNow = {},
             onDailyEnabledChange = {},
             onShowAppPicker = {},
             onBackFromAppPicker = {},
+            onShowCalibration = {},
+            onBackFromCalibration = {},
             onManualPackageInputChange = {},
             onManualPackageSubmitted = {},
             onTargetPackageSelected = {},

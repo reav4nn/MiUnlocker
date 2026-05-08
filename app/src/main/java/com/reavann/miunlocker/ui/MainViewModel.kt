@@ -1,9 +1,11 @@
 package com.reavann.miunlocker.ui
 
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.reavann.miunlocker.automation.MiUnlockAccessibilityService
 import com.reavann.miunlocker.data.AppSettings
 import com.reavann.miunlocker.data.InstalledAppInfo
 import com.reavann.miunlocker.data.InstalledAppsRepository
@@ -23,6 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 class MainViewModel(
+    private val appContext: Context,
     private val settingsRepository: SettingsRepository,
     private val installedAppsRepository: InstalledAppsRepository,
     private val setupStatusRepository: SetupStatusRepository,
@@ -31,13 +34,15 @@ class MainViewModel(
     private val appPickerState = MutableStateFlow(AppPickerState())
     private val setupStatus = MutableStateFlow(SetupStatusSnapshot())
     private val scheduleState = MutableStateFlow(ScheduleUiState())
+    private val manualTestState = MutableStateFlow(ManualTestUiState())
 
     val uiState = combine(
         settingsRepository.settings,
         appPickerState,
         setupStatus,
         scheduleState,
-    ) { settings, appPicker, setupStatus, schedule ->
+        manualTestState,
+    ) { settings, appPicker, setupStatus, schedule, manualTest ->
         MainUiState(
             settings = settings,
             installedApps = appPicker.installedApps,
@@ -46,6 +51,7 @@ class MainViewModel(
             targetPackageError = appPicker.targetPackageError,
             setupStatus = setupStatus,
             scheduleState = schedule,
+            manualTestState = manualTest,
         )
     }
         .stateIn(
@@ -70,6 +76,98 @@ class MainViewModel(
         viewModelScope.launch {
             settingsRepository.setOffsetMillis(offsetMillis)
             rescheduleIfArmed()
+        }
+    }
+
+    fun onTapRatiosChanged(xRatio: Float, yRatio: Float) {
+        viewModelScope.launch {
+            settingsRepository.setTapRatios(xRatio, yRatio)
+        }
+    }
+
+    fun onTapRatiosReset() {
+        viewModelScope.launch {
+            settingsRepository.setTapRatios(
+                xRatio = AppSettings.DEFAULT_TAP_X_RATIO,
+                yRatio = AppSettings.DEFAULT_TAP_Y_RATIO,
+            )
+        }
+    }
+
+    fun onTestNow() {
+        if (manualTestState.value.isRunning) return
+
+        viewModelScope.launch {
+            refreshSetupStatus()
+            val settings = settingsRepository.getCurrentSettings()
+            val targetPackage = settings.targetPackage
+
+            if (targetPackage.isBlank()) {
+                manualTestState.value = ManualTestUiState(
+                    resultTitle = "Test skipped",
+                    resultText = "Select a target app first.",
+                )
+                return@launch
+            }
+
+            if (!setupStatus.value.accessibilityEnabled) {
+                manualTestState.value = ManualTestUiState(
+                    resultTitle = "Test skipped",
+                    resultText = "Enable the MiUnlocker tap service first.",
+                )
+                return@launch
+            }
+
+            manualTestState.value = ManualTestUiState(isRunning = true)
+
+            val launchResult = launchTargetApp(targetPackage)
+            if (!launchResult.opened) {
+                manualTestState.value = ManualTestUiState(
+                    resultTitle = "Test skipped",
+                    resultText = launchResult.message,
+                )
+                return@launch
+            }
+
+            val prepareSettings = settingsRepository.getCurrentSettings()
+            if (prepareSettings.targetPackage != targetPackage) {
+                manualTestState.value = ManualTestUiState(
+                    resultTitle = "Test skipped",
+                    resultText = "Selected target changed before preparing the unlock page.",
+                )
+                return@launch
+            }
+
+            val prepareResult = MiUnlockAccessibilityService.prepareUnlockPageCommand(
+                targetPackage = prepareSettings.targetPackage,
+                timeoutMillis = MANUAL_TEST_PREPARE_TIMEOUT_MILLIS,
+            )
+            if (!prepareResult.readyForFinalTap) {
+                manualTestState.value = ManualTestUiState(
+                    resultTitle = prepareResult.title,
+                    resultText = "${launchResult.message} ${prepareResult.text}",
+                )
+                return@launch
+            }
+
+            val preparedSettings = settingsRepository.getCurrentSettings()
+            if (preparedSettings.targetPackage != prepareSettings.targetPackage) {
+                manualTestState.value = ManualTestUiState(
+                    resultTitle = "Test skipped",
+                    resultText = "Selected target changed after preparing the unlock page.",
+                )
+                return@launch
+            }
+
+            val tapResult = MiUnlockAccessibilityService.executeTapCommand(
+                targetPackage = preparedSettings.targetPackage,
+                xRatio = preparedSettings.tapXRatio,
+                yRatio = preparedSettings.tapYRatio,
+            )
+            manualTestState.value = ManualTestUiState(
+                resultTitle = tapResult.title,
+                resultText = "${launchResult.message} ${tapResult.text}",
+            )
         }
     }
 
@@ -215,7 +313,35 @@ class MainViewModel(
         )
     }
 
+    private fun launchTargetApp(targetPackage: String): ManualLaunchResult {
+        val launchIntent = appContext.packageManager.getLaunchIntentForPackage(targetPackage)
+            ?: return ManualLaunchResult(
+                opened = false,
+                message = "Target app could not be opened.",
+            )
+
+        return runCatching {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            appContext.startActivity(launchIntent)
+        }.fold(
+            onSuccess = {
+                ManualLaunchResult(
+                    opened = true,
+                    message = "Selected target app opened.",
+                )
+            },
+            onFailure = {
+                ManualLaunchResult(
+                    opened = false,
+                    message = "Target app launch failed.",
+                )
+            },
+        )
+    }
+
     companion object {
+        private const val MANUAL_TEST_PREPARE_TIMEOUT_MILLIS = 60_000L
+
         fun factory(context: Context): ViewModelProvider.Factory {
             val appContext = context.applicationContext
 
@@ -224,6 +350,7 @@ class MainViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
                         return MainViewModel(
+                            appContext = appContext,
                             settingsRepository = SettingsRepository(appContext),
                             installedAppsRepository = InstalledAppsRepository(appContext),
                             setupStatusRepository = SetupStatusRepository(appContext),
@@ -241,5 +368,10 @@ class MainViewModel(
         val isAppListLoading: Boolean = false,
         val manualPackageInput: String = "",
         val targetPackageError: String? = null,
+    )
+
+    private data class ManualLaunchResult(
+        val opened: Boolean,
+        val message: String,
     )
 }

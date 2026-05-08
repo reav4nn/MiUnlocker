@@ -16,6 +16,7 @@ data class MainUiState(
     val targetPackageError: String? = null,
     val setupStatus: SetupStatusSnapshot = SetupStatusSnapshot(),
     val scheduleState: ScheduleUiState = ScheduleUiState(),
+    val manualTestState: ManualTestUiState = ManualTestUiState(),
 ) {
     val selectedTargetAppText: String
         get() {
@@ -23,6 +24,10 @@ data class MainUiState(
             if (packageName.isBlank()) return "Not selected"
 
             val label = installedApps.firstOrNull { app -> app.packageName == packageName }?.label
+            if (label.isNullOrBlank() && packageName == AppSettings.DEFAULT_TARGET_PACKAGE) {
+                return "Xiaomi Community ($packageName)"
+            }
+
             return if (label.isNullOrBlank() || label == packageName) {
                 packageName
             } else {
@@ -43,13 +48,30 @@ data class MainUiState(
             settings.targetPackage.isBlank() -> "Select a target app before arming daily automation."
             !setupStatus.exactAlarmAllowed -> "Grant exact alarm permission before arming daily automation."
             scheduleState.schedulingError != null -> scheduleState.schedulingError
-            settings.dailyEnabled -> "The exact alarm starts the foreground service, launches the target app, and sends the Accessibility tap command."
+            settings.dailyEnabled -> "The exact alarm starts the foreground service, prepares the unlock page, and sends the Accessibility tap command at tap time."
             else -> "Arming schedules the next exact alarm using the selected target app, offset, and saved tap ratios."
         }
 
     val canChangeDailyAutomation: Boolean
         get() = settings.dailyEnabled ||
             (settings.targetPackage.isNotBlank() && setupStatus.exactAlarmAllowed)
+
+    val canRunManualTest: Boolean
+        get() = settings.targetPackage.isNotBlank() &&
+            setupStatus.accessibilityEnabled &&
+            !manualTestState.isRunning
+
+    val manualTestButtonText: String
+        get() = if (manualTestState.isRunning) "Testing..." else "Test now"
+
+    val manualTestSupportingText: String
+        get() = when {
+            settings.targetPackage.isBlank() -> "Select a target app before running a manual test."
+            !setupStatus.accessibilityEnabled -> "Enable the MiUnlocker tap service before running a manual test."
+            manualTestState.isRunning -> "Opening the target app, dismissing the prompt, opening ME, and waiting for Unlock bootloader/Apply."
+            manualTestState.resultTitle != null -> "${manualTestState.resultTitle}: ${manualTestState.resultText.orEmpty()}"
+            else -> "Launches the selected app, prepares the unlock page, then sends the saved Accessibility tap command."
+        }
 
     val nextTapTimeText: String
         get() = scheduleState.nextTapEpochMillis?.formatBakuTime() ?: "Not scheduled"
@@ -95,3 +117,9 @@ data class MainUiState(
         )
     }
 }
+
+data class ManualTestUiState(
+    val isRunning: Boolean = false,
+    val resultTitle: String? = null,
+    val resultText: String? = null,
+)
