@@ -492,6 +492,10 @@ class MiUnlockAccessibilityService : AccessibilityService() {
         @Volatile
         private var activeService: MiUnlockAccessibilityService? = null
 
+        fun isServiceActive(): Boolean {
+            return activeService != null
+        }
+
         fun executeTapCommand(
             targetPackage: String,
             xRatio: Float,

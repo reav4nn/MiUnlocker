@@ -31,30 +31,7 @@ class SetupStatusRepository(context: Context) {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
-        val expectedComponentName = ComponentName(appContext, MiUnlockAccessibilityService::class.java)
-        val expectedFlattened = expectedComponentName.flattenToString()
-        
-        val enabledServicesSetting = Settings.Secure.getString(
-            appContext.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: ""
-        
-        val isEnabledInSettings = enabledServicesSetting.split(':').any {
-            it.equals(expectedFlattened, ignoreCase = true)
-        }
-        
-        if (isEnabledInSettings) return true
-
-        val accessibilityManager = appContext.getSystemService(AccessibilityManager::class.java)
-            ?: return false
-
-        val enabledServices = accessibilityManager.getEnabledAccessibilityServiceList(
-            AccessibilityServiceInfo.FEEDBACK_GENERIC,
-        ) ?: return false
-
-        return enabledServices.any { serviceInfo ->
-            serviceInfo.resolveInfo?.serviceInfo?.packageName == appContext.packageName
-        }
+        return MiUnlockAccessibilityService.isServiceActive()
     }
 
     private fun isIgnoringBatteryOptimizations(): Boolean {
