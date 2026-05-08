@@ -15,6 +15,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.reavann.miunlocker.MainActivity
 import com.reavann.miunlocker.R
+import com.reavann.miunlocker.data.LogEntry
+import com.reavann.miunlocker.data.LogsRepository
 import com.reavann.miunlocker.data.SettingsRepository
 import com.reavann.miunlocker.scheduling.ExactAlarmScheduler
 import java.util.Locale
@@ -31,6 +33,7 @@ import kotlinx.coroutines.withContext
 class TapForegroundService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val logsRepository by lazy { LogsRepository(this) }
     private var targetTapEpochMillis: Long = 0L
     private var targetPackage: String = ""
     private var launchAttempted = false
@@ -138,6 +141,16 @@ class TapForegroundService : Service() {
         val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
         if (launchIntent == null) {
             launchStatusText = "Target app could not be opened."
+            serviceScope.launch {
+                logsRepository.addLogEntry(
+                    LogEntry(
+                        eventType = LogEntry.EVENT_APP_LAUNCH,
+                        targetPackage = targetPackage,
+                        resultTitle = "Launch failed",
+                        resultText = "Target app could not be opened.",
+                    ),
+                )
+            }
             return
         }
 
@@ -146,8 +159,28 @@ class TapForegroundService : Service() {
             startActivity(launchIntent)
         }.onSuccess {
             launchStatusText = "Selected target app opened."
+            serviceScope.launch {
+                logsRepository.addLogEntry(
+                    LogEntry(
+                        eventType = LogEntry.EVENT_APP_LAUNCH,
+                        targetPackage = targetPackage,
+                        resultTitle = "Launch succeeded",
+                        resultText = "Selected target app opened.",
+                    ),
+                )
+            }
         }.onFailure {
             launchStatusText = "Target app launch failed."
+            serviceScope.launch {
+                logsRepository.addLogEntry(
+                    LogEntry(
+                        eventType = LogEntry.EVENT_APP_LAUNCH,
+                        targetPackage = targetPackage,
+                        resultTitle = "Launch failed",
+                        resultText = "Target app launch failed.",
+                    ),
+                )
+            }
         }
     }
 
@@ -167,6 +200,14 @@ class TapForegroundService : Service() {
                     result.readyForFinalTap -> "Unlock page ready."
                     else -> "Preparation result: ${result.title}."
                 }
+                logsRepository.addLogEntry(
+                    LogEntry(
+                        eventType = LogEntry.EVENT_PREPARATION,
+                        targetPackage = targetPackage,
+                        resultTitle = result.title,
+                        resultText = result.text,
+                    ),
+                )
                 notificationManager.notify(
                     NOTIFICATION_ID,
                     buildNotification(
@@ -195,7 +236,21 @@ class TapForegroundService : Service() {
         )
 
         serviceScope.launch {
+            val actualTime = System.currentTimeMillis()
             val result = buildTapCommandResult()
+            logsRepository.addLogEntry(
+                LogEntry(
+                    eventType = LogEntry.EVENT_TAP_EXECUTION,
+                    targetPackage = targetPackage,
+                    scheduledTime = targetTapEpochMillis,
+                    actualTime = actualTime,
+                    deltaMillis = actualTime - targetTapEpochMillis,
+                    nodeFound = result.nodeFound,
+                    fallbackUsed = result.fallbackUsed,
+                    resultTitle = result.title,
+                    resultText = result.text,
+                ),
+            )
             notificationManager.notify(
                 NOTIFICATION_ID,
                 buildNotification(

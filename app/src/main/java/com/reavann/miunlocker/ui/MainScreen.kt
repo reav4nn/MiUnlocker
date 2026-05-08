@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reavann.miunlocker.R
 import com.reavann.miunlocker.data.AppSettings
 import com.reavann.miunlocker.data.InstalledAppInfo
+import com.reavann.miunlocker.data.LogEntry
 import com.reavann.miunlocker.data.formatSignedMillis
 import com.reavann.miunlocker.ui.theme.MiUnlockerTheme
 import java.util.Locale
@@ -83,6 +84,7 @@ fun MainRoute(
     }
     var showAppPicker by rememberSaveable { mutableStateOf(false) }
     var showCalibration by rememberSaveable { mutableStateOf(false) }
+    var showLogs by rememberSaveable { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshSetupStatus()
@@ -92,6 +94,7 @@ fun MainRoute(
         uiState = uiState,
         showAppPicker = showAppPicker,
         showCalibration = showCalibration,
+        showLogs = showLogs,
         onOffsetSelected = viewModel::onOffsetSelected,
         onTapRatiosChanged = viewModel::onTapRatiosChanged,
         onTapRatiosReset = viewModel::onTapRatiosReset,
@@ -99,15 +102,25 @@ fun MainRoute(
         onDailyEnabledChange = viewModel::onDailyEnabledChange,
         onShowAppPicker = {
             showCalibration = false
+            showLogs = false
             showAppPicker = true
             viewModel.refreshInstalledApps()
         },
         onBackFromAppPicker = { showAppPicker = false },
         onShowCalibration = {
             showAppPicker = false
+            showLogs = false
             showCalibration = true
         },
         onBackFromCalibration = { showCalibration = false },
+        onShowLogs = {
+            showAppPicker = false
+            showCalibration = false
+            showLogs = true
+            viewModel.refreshLogs()
+        },
+        onBackFromLogs = { showLogs = false },
+        onClearLogs = viewModel::clearLogs,
         onManualPackageInputChange = viewModel::onManualPackageInputChange,
         onManualPackageSubmitted = viewModel::onManualPackageSubmitted,
         onTargetPackageSelected = viewModel::onTargetPackageSelected,
@@ -137,6 +150,7 @@ fun MainScreen(
     uiState: MainUiState,
     showAppPicker: Boolean,
     showCalibration: Boolean,
+    showLogs: Boolean,
     onOffsetSelected: (Int) -> Unit,
     onTapRatiosChanged: (Float, Float) -> Unit,
     onTapRatiosReset: () -> Unit,
@@ -146,6 +160,9 @@ fun MainScreen(
     onBackFromAppPicker: () -> Unit,
     onShowCalibration: () -> Unit,
     onBackFromCalibration: () -> Unit,
+    onShowLogs: () -> Unit,
+    onBackFromLogs: () -> Unit,
+    onClearLogs: () -> Unit,
     onManualPackageInputChange: (String) -> Unit,
     onManualPackageSubmitted: () -> Unit,
     onTargetPackageSelected: (String) -> Unit,
@@ -174,6 +191,13 @@ fun MainScreen(
             onTapRatiosReset = onTapRatiosReset,
             modifier = modifier,
         )
+    } else if (showLogs) {
+        LogsScreen(
+            logsState = uiState.logsState,
+            onBack = onBackFromLogs,
+            onClearLogs = onClearLogs,
+            modifier = modifier,
+        )
     } else {
         MainDashboardScreen(
             uiState = uiState,
@@ -181,6 +205,7 @@ fun MainScreen(
             onDailyEnabledChange = onDailyEnabledChange,
             onShowAppPicker = onShowAppPicker,
             onShowCalibration = onShowCalibration,
+            onShowLogs = onShowLogs,
             onTestNow = onTestNow,
             onOpenAccessibilitySettings = onOpenAccessibilitySettings,
             onOpenExactAlarmSettings = onOpenExactAlarmSettings,
@@ -198,6 +223,7 @@ private fun MainDashboardScreen(
     onDailyEnabledChange: (Boolean) -> Unit,
     onShowAppPicker: () -> Unit,
     onShowCalibration: () -> Unit,
+    onShowLogs: () -> Unit,
     onTestNow: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenExactAlarmSettings: () -> Unit,
@@ -235,6 +261,7 @@ private fun MainDashboardScreen(
             ActionsSection(
                 uiState = uiState,
                 onShowCalibration = onShowCalibration,
+                onShowLogs = onShowLogs,
                 onTestNow = onTestNow,
             )
         }
@@ -490,6 +517,152 @@ private fun CalibrationScreen(
 }
 
 @Composable
+private fun LogsScreen(
+    logsState: LogsUiState,
+    onBack: () -> Unit,
+    onClearLogs: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(modifier = modifier) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Logs",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Recent automation events and tap results.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onBack) {
+                    Text(text = "Back")
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onClearLogs,
+                    enabled = logsState.logs.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(text = "Clear logs")
+                }
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(text = "Done")
+                }
+            }
+
+            if (logsState.isLoading) {
+                Text(
+                    text = "Loading logs...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (logsState.logs.isEmpty()) {
+                Text(
+                    text = "No logs yet. Run Test now or wait for a scheduled tap.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                logsState.logs.asReversed().forEach { entry ->
+                    LogEntryCard(entry = entry)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogEntryCard(entry: LogEntry) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = entry.eventTypeLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = entry.formattedTimestamp,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (entry.targetPackage.isNotBlank()) {
+                Text(
+                    text = "Package: ${entry.targetPackage}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (entry.scheduledTime != null && entry.actualTime != null) {
+                Text(
+                    text = "Scheduled: ${entry.scheduledTime} | Actual: ${entry.actualTime} | Delta: ${entry.deltaMillis}ms",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (entry.nodeFound != null) {
+                Text(
+                    text = "Node found: ${if (entry.nodeFound) "Yes" else "No"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (entry.fallbackUsed != null) {
+                Text(
+                    text = "Fallback used: ${if (entry.fallbackUsed) "Yes" else "No"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = entry.resultTitle,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            if (entry.resultText.isNotBlank()) {
+                Text(
+                    text = entry.resultText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CalibrationPreview(
     xRatio: Float,
     yRatio: Float,
@@ -633,7 +806,7 @@ private fun PhaseNoticeCard() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Phase 7: Calibration and manual test mode",
+                text = "Phase 8: Logs and diagnostics",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -806,6 +979,7 @@ private fun AutomationSection(
 private fun ActionsSection(
     uiState: MainUiState,
     onShowCalibration: () -> Unit,
+    onShowLogs: () -> Unit,
     onTestNow: () -> Unit,
 ) {
     SectionCard(title = "Actions") {
@@ -833,11 +1007,10 @@ private fun ActionsSection(
         )
         HorizontalDivider()
         OutlinedButton(
-            onClick = {},
-            enabled = false,
+            onClick = onShowLogs,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(text = "Logs - Phase 8")
+            Text(text = "View logs")
         }
     }
 }
@@ -1015,6 +1188,7 @@ private fun MainScreenPreview() {
             uiState = MainUiState(),
             showAppPicker = false,
             showCalibration = false,
+            showLogs = false,
             onOffsetSelected = {},
             onTapRatiosChanged = { _, _ -> },
             onTapRatiosReset = {},
@@ -1024,6 +1198,9 @@ private fun MainScreenPreview() {
             onBackFromAppPicker = {},
             onShowCalibration = {},
             onBackFromCalibration = {},
+            onShowLogs = {},
+            onBackFromLogs = {},
+            onClearLogs = {},
             onManualPackageInputChange = {},
             onManualPackageSubmitted = {},
             onTargetPackageSelected = {},

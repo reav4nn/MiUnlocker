@@ -44,16 +44,22 @@ class MiUnlockAccessibilityService : AccessibilityService() {
             ?: return TapExecutionResult(
                 title = "Tap skipped",
                 text = "Apply for unlocking was not visible, so no fallback tap was sent.",
+                nodeFound = false,
             )
         val clickableNode = matchingNode.findClickableSelfOrParent()
         if (clickableNode?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) {
             return TapExecutionResult(
                 title = "Tap executed",
                 text = "Clicked the matching Apply for unlocking node.",
+                nodeFound = true,
+                fallbackUsed = false,
             )
         }
 
-        return dispatchCoordinateFallback(xRatio, yRatio)
+        return dispatchCoordinateFallback(xRatio, yRatio).copy(
+            nodeFound = true,
+            fallbackUsed = true,
+        )
     }
 
     private suspend fun prepareUnlockPageCommand(
@@ -534,4 +540,6 @@ data class TapExecutionResult(
     val title: String,
     val text: String,
     val readyForFinalTap: Boolean = false,
+    val nodeFound: Boolean? = null,
+    val fallbackUsed: Boolean? = null,
 )

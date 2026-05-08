@@ -2,6 +2,7 @@ package com.reavann.miunlocker.ui
 
 import com.reavann.miunlocker.data.AppSettings
 import com.reavann.miunlocker.data.InstalledAppInfo
+import com.reavann.miunlocker.data.LogEntry
 import com.reavann.miunlocker.data.SetupStatusSnapshot
 import java.time.Instant
 import java.time.ZoneId
@@ -17,6 +18,7 @@ data class MainUiState(
     val setupStatus: SetupStatusSnapshot = SetupStatusSnapshot(),
     val scheduleState: ScheduleUiState = ScheduleUiState(),
     val manualTestState: ManualTestUiState = ManualTestUiState(),
+    val logsState: LogsUiState = LogsUiState(),
 ) {
     val selectedTargetAppText: String
         get() {
@@ -122,4 +124,9 @@ data class ManualTestUiState(
     val isRunning: Boolean = false,
     val resultTitle: String? = null,
     val resultText: String? = null,
+)
+
+data class LogsUiState(
+    val logs: List<LogEntry> = emptyList(),
+    val isLoading: Boolean = false,
 )

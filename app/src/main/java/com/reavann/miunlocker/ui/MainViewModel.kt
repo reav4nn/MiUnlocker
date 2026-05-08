@@ -9,6 +9,8 @@ import com.reavann.miunlocker.automation.MiUnlockAccessibilityService
 import com.reavann.miunlocker.data.AppSettings
 import com.reavann.miunlocker.data.InstalledAppInfo
 import com.reavann.miunlocker.data.InstalledAppsRepository
+import com.reavann.miunlocker.data.LogEntry
+import com.reavann.miunlocker.data.LogsRepository
 import com.reavann.miunlocker.data.SettingsRepository
 import com.reavann.miunlocker.data.SetupStatusRepository
 import com.reavann.miunlocker.data.SetupStatusSnapshot
@@ -30,11 +32,13 @@ class MainViewModel(
     private val installedAppsRepository: InstalledAppsRepository,
     private val setupStatusRepository: SetupStatusRepository,
     private val exactAlarmScheduler: ExactAlarmScheduler,
+    private val logsRepository: LogsRepository,
 ) : ViewModel() {
     private val appPickerState = MutableStateFlow(AppPickerState())
     private val setupStatus = MutableStateFlow(SetupStatusSnapshot())
     private val scheduleState = MutableStateFlow(ScheduleUiState())
     private val manualTestState = MutableStateFlow(ManualTestUiState())
+    private val logsState = MutableStateFlow(LogsUiState())
 
     val uiState = combine(
         settingsRepository.settings,
@@ -42,7 +46,14 @@ class MainViewModel(
         setupStatus,
         scheduleState,
         manualTestState,
-    ) { settings, appPicker, setupStatus, schedule, manualTest ->
+        logsState,
+    ) { flows ->
+        val settings = flows[0] as AppSettings
+        val appPicker = flows[1] as AppPickerState
+        val setupStatus = flows[2] as SetupStatusSnapshot
+        val schedule = flows[3] as ScheduleUiState
+        val manualTest = flows[4] as ManualTestUiState
+        val logs = flows[5] as LogsUiState
         MainUiState(
             settings = settings,
             installedApps = appPicker.installedApps,
@@ -52,6 +63,7 @@ class MainViewModel(
             setupStatus = setupStatus,
             scheduleState = schedule,
             manualTestState = manualTest,
+            logsState = logs,
         )
     }
         .stateIn(
@@ -121,6 +133,14 @@ class MainViewModel(
             manualTestState.value = ManualTestUiState(isRunning = true)
 
             val launchResult = launchTargetApp(targetPackage)
+            logsRepository.addLogEntry(
+                LogEntry(
+                    eventType = LogEntry.EVENT_APP_LAUNCH,
+                    targetPackage = targetPackage,
+                    resultTitle = if (launchResult.opened) "Launch succeeded" else "Launch failed",
+                    resultText = launchResult.message,
+                ),
+            )
             if (!launchResult.opened) {
                 manualTestState.value = ManualTestUiState(
                     resultTitle = "Test skipped",
@@ -142,6 +162,14 @@ class MainViewModel(
                 targetPackage = prepareSettings.targetPackage,
                 timeoutMillis = MANUAL_TEST_PREPARE_TIMEOUT_MILLIS,
             )
+            logsRepository.addLogEntry(
+                LogEntry(
+                    eventType = LogEntry.EVENT_PREPARATION,
+                    targetPackage = prepareSettings.targetPackage,
+                    resultTitle = prepareResult.title,
+                    resultText = prepareResult.text,
+                ),
+            )
             if (!prepareResult.readyForFinalTap) {
                 manualTestState.value = ManualTestUiState(
                     resultTitle = prepareResult.title,
@@ -151,7 +179,7 @@ class MainViewModel(
             }
 
             val preparedSettings = settingsRepository.getCurrentSettings()
-            if (preparedSettings.targetPackage != prepareSettings.targetPackage) {
+            if (preparedSettings.targetPackage != targetPackage) {
                 manualTestState.value = ManualTestUiState(
                     resultTitle = "Test skipped",
                     resultText = "Selected target changed after preparing the unlock page.",
@@ -163,6 +191,16 @@ class MainViewModel(
                 targetPackage = preparedSettings.targetPackage,
                 xRatio = preparedSettings.tapXRatio,
                 yRatio = preparedSettings.tapYRatio,
+            )
+            logsRepository.addLogEntry(
+                LogEntry(
+                    eventType = LogEntry.EVENT_TAP_EXECUTION,
+                    targetPackage = preparedSettings.targetPackage,
+                    nodeFound = tapResult.nodeFound,
+                    fallbackUsed = tapResult.fallbackUsed,
+                    resultTitle = tapResult.title,
+                    resultText = tapResult.text,
+                ),
             )
             manualTestState.value = ManualTestUiState(
                 resultTitle = tapResult.title,
@@ -201,6 +239,21 @@ class MainViewModel(
 
     fun refreshSetupStatus() {
         setupStatus.value = setupStatusRepository.getSnapshot()
+    }
+
+    fun refreshLogs() {
+        viewModelScope.launch {
+            logsState.value = LogsUiState(isLoading = true)
+            val entries = logsRepository.getLogEntries()
+            logsState.value = LogsUiState(logs = entries)
+        }
+    }
+
+    fun clearLogs() {
+        viewModelScope.launch {
+            logsRepository.clearLogs()
+            logsState.value = LogsUiState()
+        }
     }
 
     fun onManualPackageInputChange(packageName: String) {
@@ -355,6 +408,7 @@ class MainViewModel(
                             installedAppsRepository = InstalledAppsRepository(appContext),
                             setupStatusRepository = SetupStatusRepository(appContext),
                             exactAlarmScheduler = ExactAlarmScheduler(appContext),
+                            logsRepository = LogsRepository(appContext),
                         ) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
