@@ -28,7 +28,7 @@ Default timing context:
 
 ## Current Status
 
-The project is currently at **Phase 9: reliability polish and release verification**.
+**v1.0.0** — All planned phases completed. Personal release APK candidate.
 
 Implemented:
 - Android/Kotlin Gradle project skeleton.
@@ -55,7 +55,7 @@ Implemented:
 - Local logs and diagnostics screen that records app launch, preparation, and tap execution events with timing deltas and result text.
 
 > [!WARNING]
-> The current build can prepare Xiaomi Community and perform scheduled/manual Accessibility tap commands only when the service is enabled, the selected target app is active, and the device state allows Accessibility gestures. Results are not guaranteed due to Android background limits, OEM battery restrictions, Xiaomi Community UI changes, and server-side timing.
+> MiUnlocker can prepare Xiaomi Community and perform scheduled/manual Accessibility tap commands only when the service is enabled, the selected target app is active, and the device state allows Accessibility gestures. Results are not guaranteed due to Android background limits, OEM battery restrictions (especially HyperOS/MIUI), Xiaomi Community UI changes, and server-side timing.
 
 ## Build
 
@@ -110,6 +110,7 @@ Current manifest permissions:
 - `android.permission.FOREGROUND_SERVICE`
 - `android.permission.FOREGROUND_SERVICE_SPECIAL_USE`
 - `android.permission.POST_NOTIFICATIONS`
+- `android.permission.WAKE_LOCK`
 
 Current package visibility:
 - Launcher-app visibility query for target app selection.
@@ -158,7 +159,7 @@ app/src/main/java/com/reavann/miunlocker/
 
 ## Roadmap
 
-Completed milestones:
+All planned phases completed:
 
 - Phase 1–2: project skeleton and Compose baseline.
 - Phase 3: DataStore settings and main status UI.
@@ -167,7 +168,9 @@ Completed milestones:
 - Phase 6: Accessibility tap engine with node-first and coordinate fallback.
 - Phase 7: calibration, manual `Test now`, and Xiaomi Community preparation hardening.
 - Phase 8: local logs and diagnostics screen.
-- Phase 9: pre-warning unlock reminder, final reliability polish, and README update.
+- Phase 9: pre-warning unlock reminder, HyperOS/MIUI reliability notes, WAKE_LOCK, icon consistency, final verification, and v1.0.0 release.
+
+No further phases are planned. Future work would be maintenance-only (e.g., updating Xiaomi Community UI text selectors or adjusting timing constants).
 
 Offsets are applied relative to the stored base target time. The alarm trigger is scheduled about 2 minutes before the final tap time so Xiaomi Community can load the `ME` page and `Unlock bootloader` entry before the precise final tap moment. A pre-warning reminder is scheduled an additional 2 minutes earlier.
 
@@ -185,11 +188,11 @@ Offsets are applied relative to the stored base target time. The alarm trigger i
 
 ## Verification
 
-Latest local checks performed:
+Latest checks performed for v1.0.0:
 
 ```bash
 ./gradlew :app:assembleDebug
 ./gradlew :app:lintDebug
 ```
 
-The manifest was also checked for forbidden network and personal-data permissions; none were found. Build and lint completed successfully after adding the pre-warning receiver, extending the scheduler, and updating the main UI.
+The manifest was checked for forbidden permissions (`INTERNET`, contacts, files/media, SMS, phone, `QUERY_ALL_PACKAGES`); none were found. Build and lint completed successfully. All nine planned phases are implemented.

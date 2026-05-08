@@ -241,7 +241,6 @@ private fun MainDashboardScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             HeaderCard()
-            PhaseNoticeCard()
             StatusSection(
                 uiState = uiState,
                 onShowAppPicker = onShowAppPicker,
@@ -789,32 +788,6 @@ private fun HeaderCard() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun PhaseNoticeCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = "Phase 9: Reliability polish",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "The app prepares Xiaomi Community first: dismisses the notification prompt, opens ME, waits for Unlock bootloader, then taps Apply at the target time. A pre-warning reminder fires about 4 minutes before tap time.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
         }
     }
 }
