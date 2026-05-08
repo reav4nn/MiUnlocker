@@ -76,11 +76,12 @@ class MiUnlockAccessibilityService : AccessibilityService() {
             waitForPrompt = true,
         )
 
-        if (findApplyNode(root) != null) {
+        val currentRoot = activeRootForPackage(targetPackage) ?: root
+        if (findApplyNode(currentRoot) != null) {
             return targetReadyResult("Apply for unlocking is already visible.")
         }
 
-        if (findUnlockBootloaderNode(root) == null && !openMeTab(targetPackage, deadline)) {
+        if (findUnlockBootloaderNode(currentRoot) == null && !openMeTab(targetPackage, deadline)) {
             return TapExecutionResult(
                 title = "Prepare skipped",
                 text = "ME tab was not visible before the preparation timeout.",
@@ -131,7 +132,10 @@ class MiUnlockAccessibilityService : AccessibilityService() {
                 val normalized = text.trim()
                 normalized.equals(ME_TAB_TEXT, ignoreCase = true) ||
                     normalized.equals("Me tab", ignoreCase = true) ||
-                    normalized.equals("Profile", ignoreCase = true)
+                    normalized.equals("Profile", ignoreCase = true) ||
+                    normalized.equals("Account", ignoreCase = true) ||
+                    normalized.equals("I", ignoreCase = true) ||
+                    normalized.startsWith("Me", ignoreCase = true)
             }
         }
     }
@@ -226,21 +230,25 @@ class MiUnlockAccessibilityService : AccessibilityService() {
         do {
             val root = activeRootForPackage(targetPackage) ?: return false
             val meNode = findMeTabNode(root)
-            if (meNode?.findClickableSelfOrParent()
-                    ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-            ) {
-                delay(AFTER_CLICK_DELAY_MILLIS)
-                return true
-            }
+            if (meNode != null) {
+                if (meNode.findClickableSelfOrParent()
+                        ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+                ) {
+                    delay(AFTER_CLICK_DELAY_MILLIS)
+                    return true
+                }
 
-            if (meNode != null && dispatchTapAtNodeCenter(meNode)) {
-                delay(AFTER_CLICK_DELAY_MILLIS)
-                return true
-            }
+                if (dispatchTapAtNodeCenter(meNode)) {
+                    delay(AFTER_CLICK_DELAY_MILLIS)
+                    return true
+                }
 
-            if (dispatchTapAtRatioInRoot(root, ME_TAB_X_RATIO, ME_TAB_Y_RATIO)) {
-                delay(AFTER_CLICK_DELAY_MILLIS)
-                return true
+                if (dispatchTapAtRatioInRoot(root, ME_TAB_X_RATIO, ME_TAB_Y_RATIO)) {
+                    delay(AFTER_CLICK_DELAY_MILLIS)
+                    return true
+                }
+            } else {
+                scrollForward(root)
             }
 
             delay(POLL_INTERVAL_MILLIS + pollJitter())
@@ -500,7 +508,7 @@ class MiUnlockAccessibilityService : AccessibilityService() {
             val service = activeService
                 ?: return TapExecutionResult(
                     title = "Tap skipped",
-                    text = "MiUnlocker Accessibility service is not enabled.",
+                    text = "Accessibility service connection lost. Disable and re-enable MiUnlocker tap service in Accessibility settings.",
                 )
 
             return service.executeTapCommand(
@@ -525,7 +533,7 @@ class MiUnlockAccessibilityService : AccessibilityService() {
             val service = activeService
                 ?: return TapExecutionResult(
                     title = "Prepare skipped",
-                    text = "MiUnlocker Accessibility service is not enabled.",
+                    text = "Accessibility service connection lost. Disable and re-enable MiUnlocker tap service in Accessibility settings.",
                 )
 
             return service.prepareUnlockPageCommand(

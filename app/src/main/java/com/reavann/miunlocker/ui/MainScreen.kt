@@ -527,6 +527,7 @@ private fun LogsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(innerPadding)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -806,12 +807,12 @@ private fun PhaseNoticeCard() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Phase 8: Logs and diagnostics",
+                text = "Phase 9: Reliability polish",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "The app prepares Xiaomi Community first: dismisses the notification prompt, opens ME, waits for Unlock bootloader, then taps Apply at the target time.",
+                text = "The app prepares Xiaomi Community first: dismisses the notification prompt, opens ME, waits for Unlock bootloader, then taps Apply at the target time. A pre-warning reminder fires about 4 minutes before tap time.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -848,7 +849,7 @@ private fun StatusSection(
         StatusActionRow(
             label = "Battery optimization",
             value = uiState.batteryOptimizationStatusText,
-            supportingText = "Unrestricted battery behavior improves alarm and foreground-service reliability later.",
+            supportingText = "On HyperOS/MIUI: also enable Auto-start for MiUnlocker in system settings and lock it in recent tasks. Unrestricted battery and auto-start are both required for reliable alarms.",
             actionLabel = "Open Battery Settings",
             onAction = onOpenBatteryOptimizationSettings,
         )
@@ -966,6 +967,12 @@ private fun AutomationSection(
             label = "Foreground service starts",
             value = uiState.foregroundStartTimeText,
             supportingText = "The selected target app is launched about 2 minutes before tap time so server-loaded unlock UI can appear.",
+        )
+        HorizontalDivider()
+        InfoRow(
+            label = "Unlock reminder",
+            value = uiState.preWarningTimeText,
+            supportingText = "Audible reminder to unlock the phone and keep the screen on about 4 minutes before tap time.",
         )
         Text(
             text = uiState.dailyAutomationSupportingText,

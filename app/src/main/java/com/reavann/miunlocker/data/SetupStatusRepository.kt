@@ -1,13 +1,16 @@
 package com.reavann.miunlocker.data
 
 import android.Manifest
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import androidx.core.content.ContextCompat
+import com.reavann.miunlocker.automation.MiUnlockAccessibilityService
 import com.reavann.miunlocker.scheduling.canScheduleExactAlarmsCompat
 
 class SetupStatusRepository(context: Context) {
@@ -27,6 +30,33 @@ class SetupStatusRepository(context: Context) {
         )
     }
 
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val expectedComponentName = ComponentName(appContext, MiUnlockAccessibilityService::class.java)
+        val expectedFlattened = expectedComponentName.flattenToString()
+        
+        val enabledServicesSetting = Settings.Secure.getString(
+            appContext.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        
+        val isEnabledInSettings = enabledServicesSetting.split(':').any {
+            it.equals(expectedFlattened, ignoreCase = true)
+        }
+        
+        if (isEnabledInSettings) return true
+
+        val accessibilityManager = appContext.getSystemService(AccessibilityManager::class.java)
+            ?: return false
+
+        val enabledServices = accessibilityManager.getEnabledAccessibilityServiceList(
+            AccessibilityServiceInfo.FEEDBACK_GENERIC,
+        ) ?: return false
+
+        return enabledServices.any { serviceInfo ->
+            serviceInfo.resolveInfo?.serviceInfo?.packageName == appContext.packageName
+        }
+    }
+
     private fun isIgnoringBatteryOptimizations(): Boolean {
         val powerManager = appContext.getSystemService(PowerManager::class.java)
         return powerManager?.isIgnoringBatteryOptimizations(appContext.packageName) == true
@@ -37,35 +67,5 @@ class SetupStatusRepository(context: Context) {
             appContext,
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val resolver = appContext.contentResolver
-        val accessibilityEnabled = Settings.Secure.getInt(
-            resolver,
-            Settings.Secure.ACCESSIBILITY_ENABLED,
-            0,
-        ) == 1
-
-        if (!accessibilityEnabled) return false
-
-        val enabledServices = Settings.Secure.getString(
-            resolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ).orEmpty()
-
-        return enabledServices
-            .split(':')
-            .asSequence()
-            .mapNotNull(ComponentName::unflattenFromString)
-            .any { componentName ->
-                componentName.packageName == appContext.packageName &&
-                    componentName.className == ACCESSIBILITY_SERVICE_CLASS
-            }
-    }
-
-    private companion object {
-        const val ACCESSIBILITY_SERVICE_CLASS =
-            "com.reavann.miunlocker.automation.MiUnlockAccessibilityService"
     }
 }

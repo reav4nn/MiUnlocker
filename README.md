@@ -28,11 +28,11 @@ Default timing context:
 
 ## Current Status
 
-The project is currently at **Phase 7: calibration and manual test mode**.
+The project is currently at **Phase 9: reliability polish and release verification**.
 
 Implemented:
 - Android/Kotlin Gradle project skeleton.
-- Compose main screen with setup status, timing, offset chips, fallback coordinate display, and daily toggle.
+- Compose main screen with setup status, timing, offset chips, fallback coordinate display, daily toggle, and logs viewer.
 - DataStore-backed settings for target package, target time, offset, fallback tap ratios, and daily enabled state.
 - Installed launchable app picker for choosing Xiaomi Community or another target app.
 - Xiaomi Community defaults to `com.mi.global.bbs` when that package is installed and launchable.
@@ -41,9 +41,10 @@ Implemented:
 - System-only Settings intent resolution to reduce fake settings screen interception risk.
 - Exact alarm scheduling with `AlarmManager.setExactAndAllowWhileIdle`.
 - Private alarm receiver that starts a foreground countdown service.
+- Pre-warning unlock reminder alarm that fires about 4 minutes before the configured tap time.
 - Foreground notification channel showing `Auto tap armed` countdown status.
 - Target app launch and Xiaomi Community unlock-page preparation about 2 minutes before the configured tap time.
-- Daily automation toggle now schedules and cancels the next exact alarm.
+- Daily automation toggle now schedules and cancels the next exact alarm and pre-warning reminder.
 - AccessibilityService registration and setup status detection.
 - Explicit foreground-service command to tap at the configured target time.
 - Active-window package restriction before any tap is attempted.
@@ -51,12 +52,10 @@ Implemented:
 - Node-first tap strategy for `Apply for unlocking`; saved-ratio coordinate fallback is used only after the Apply node is visible but not directly clickable.
 - Calibration screen for adjusting and resetting fallback tap ratios.
 - Explicit manual `Test now` workflow that opens the selected target app, prepares the unlock page, then sends the Accessibility tap command.
-
-Not implemented yet:
-- Local logs and diagnostics.
+- Local logs and diagnostics screen that records app launch, preparation, and tap execution events with timing deltas and result text.
 
 > [!WARNING]
-> The current build can prepare Xiaomi Community and perform scheduled/manual Accessibility tap commands only when the service is enabled, the selected target app is active, and the device state allows Accessibility gestures. It still does not include local logs or diagnostics.
+> The current build can prepare Xiaomi Community and perform scheduled/manual Accessibility tap commands only when the service is enabled, the selected target app is active, and the device state allows Accessibility gestures. Results are not guaranteed due to Android background limits, OEM battery restrictions, Xiaomi Community UI changes, and server-side timing.
 
 ## Build
 
@@ -100,7 +99,7 @@ Current build setup flow:
 9. Keep the device unlocked and screen ready near the target time.
 
 > [!NOTE]
-> The exact alarm starts a foreground service about 2 minutes before the tap time. The service opens the selected target app, dismisses the in-app notification prompt when present, opens `ME`, waits for `Unlock bootloader`, opens it, then sends the final `Apply for unlocking` tap command at the configured target time.
+> The exact alarm starts a foreground service about 2 minutes before the tap time. A pre-warning reminder is also scheduled about 4 minutes before tap time to prompt unlocking the phone and keeping the screen on. The service opens the selected target app, dismisses the in-app notification prompt when present, opens `ME`, waits for `Unlock bootloader`, opens it, then sends the final `Apply for unlocking` tap command at the configured target time.
 
 ## Privacy And Permissions
 
@@ -138,11 +137,14 @@ app/src/main/java/com/reavann/miunlocker/
 |-- data/
 |   |-- AppSettings.kt
 |   |-- InstalledAppsRepository.kt
+|   |-- LogEntry.kt
+|   |-- LogsRepository.kt
 |   |-- SettingsRepository.kt
 |   `-- SetupStatusRepository.kt
 |-- scheduling/
 |   |-- AlarmReceiver.kt
-|   `-- ExactAlarmScheduler.kt
+|   |-- ExactAlarmScheduler.kt
+|   `-- PreWarningReceiver.kt
 |-- automation/
 |   |-- MiUnlockAccessibilityService.kt
 |   `-- TapForegroundService.kt
@@ -150,17 +152,24 @@ app/src/main/java/com/reavann/miunlocker/
     |-- MainScreen.kt
     |-- MainUiState.kt
     |-- MainViewModel.kt
+    |-- ScheduleUiState.kt
     `-- theme/
 ```
 
 ## Roadmap
 
-Next planned milestones:
+Completed milestones:
 
-- Phase 8: local logs and diagnostics.
-- Phase 9: final reliability polish and release verification.
+- Phase 1–2: project skeleton and Compose baseline.
+- Phase 3: DataStore settings and main status UI.
+- Phase 4: target app selection and permission guidance.
+- Phase 5: exact alarm scheduling and foreground service.
+- Phase 6: Accessibility tap engine with node-first and coordinate fallback.
+- Phase 7: calibration, manual `Test now`, and Xiaomi Community preparation hardening.
+- Phase 8: local logs and diagnostics screen.
+- Phase 9: pre-warning unlock reminder, final reliability polish, and README update.
 
-Offsets are applied relative to the stored base target time. The alarm trigger is scheduled about 2 minutes before the final tap time so Xiaomi Community can load the `ME` page and `Unlock bootloader` entry before the precise final tap moment.
+Offsets are applied relative to the stored base target time. The alarm trigger is scheduled about 2 minutes before the final tap time so Xiaomi Community can load the `ME` page and `Unlock bootloader` entry before the precise final tap moment. A pre-warning reminder is scheduled an additional 2 minutes earlier.
 
 ## Troubleshooting
 
@@ -183,4 +192,4 @@ Latest local checks performed:
 ./gradlew :app:lintDebug
 ```
 
-The manifest was also checked for forbidden network and personal-data permissions; none were found.
+The manifest was also checked for forbidden network and personal-data permissions; none were found. Build and lint completed successfully after adding the pre-warning receiver, extending the scheduler, and updating the main UI.

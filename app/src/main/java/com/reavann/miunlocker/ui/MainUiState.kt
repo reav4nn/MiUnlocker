@@ -81,6 +81,9 @@ data class MainUiState(
     val foregroundStartTimeText: String
         get() = scheduleState.alarmTriggerEpochMillis?.formatBakuTime() ?: "Not scheduled"
 
+    val preWarningTimeText: String
+        get() = scheduleState.preWarningEpochMillis?.formatBakuTime() ?: "Not scheduled"
+
     val accessibilityStatusText: String
         get() = if (setupStatus.accessibilityEnabled) "Enabled" else "Disabled"
 

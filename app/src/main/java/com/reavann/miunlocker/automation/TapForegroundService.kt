@@ -7,10 +7,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.reavann.miunlocker.MainActivity
@@ -40,6 +41,7 @@ class TapForegroundService : Service() {
     private var launchStatusText = "Opening selected target app."
     private var preparationStatusText = "Waiting to prepare unlock page."
     private var tapCommandSent = false
+    private var wakeLock: PowerManager.WakeLock? = null
     private val preparationLock = Any()
     private var preparationJob: Job? = null
 
@@ -83,17 +85,19 @@ class TapForegroundService : Service() {
             ),
         )
 
+        acquireWakeLock()
         launchTargetAppOnce()
         prepareUnlockPageOnce()
         handler.removeCallbacks(tickRunnable)
         handler.post(tickRunnable)
 
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         synchronized(preparationLock) { preparationJob?.cancel() }
+        releaseWakeLock()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -108,6 +112,7 @@ class TapForegroundService : Service() {
                 ongoing = false,
             ),
         )
+        releaseWakeLock()
         stopSelf()
     }
 
@@ -314,6 +319,9 @@ class TapForegroundService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(
+                BitmapFactory.decodeResource(resources, R.drawable.miunlocker_logo)
+            )
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -325,8 +333,6 @@ class TapForegroundService : Service() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Auto tap countdown",
@@ -336,6 +342,21 @@ class TapForegroundService : Service() {
         }
 
         notificationManager.createNotificationChannel(channel)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        runCatching {
+            val powerManager = getSystemService(PowerManager::class.java) ?: return
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
+                .apply { acquire(WAKELOCK_TIMEOUT_MILLIS) }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
     }
 
     private val notificationManager: NotificationManager
@@ -352,6 +373,8 @@ class TapForegroundService : Service() {
         private const val MIN_TICK_MILLIS = 50L
         private const val STOP_AFTER_TARGET_MILLIS = 5_000L
         private const val FINAL_TAP_GUARD_MILLIS = 800L
+        private const val WAKELOCK_TAG = "MiUnlocker:countdown"
+        private const val WAKELOCK_TIMEOUT_MILLIS = 360_000L
 
         fun start(
             context: Context,

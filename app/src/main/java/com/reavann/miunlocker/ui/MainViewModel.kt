@@ -363,6 +363,7 @@ class MainViewModel(
         scheduleState.value = ScheduleUiState(
             nextTapEpochMillis = scheduledTap.targetTapEpochMillis,
             alarmTriggerEpochMillis = scheduledTap.alarmTriggerEpochMillis,
+            preWarningEpochMillis = scheduledTap.preWarningEpochMillis,
         )
     }
 

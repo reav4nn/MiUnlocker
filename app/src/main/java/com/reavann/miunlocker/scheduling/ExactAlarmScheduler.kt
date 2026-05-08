@@ -34,6 +34,7 @@ class ExactAlarmScheduler(context: Context) {
         return ScheduledTap(
             targetTapEpochMillis = targetTapMillis,
             alarmTriggerEpochMillis = targetTapMillis - PREPARATION_LEAD_MILLIS,
+            preWarningEpochMillis = targetTapMillis - PREPARATION_LEAD_MILLIS - PREWARNING_LEAD_MILLIS,
             targetPackage = targetPackage,
         )
     }
@@ -58,6 +59,15 @@ class ExactAlarmScheduler(context: Context) {
                 scheduledTap.alarmTriggerEpochMillis,
                 createPendingIntent(scheduledTap),
             )
+            scheduledTap.preWarningEpochMillis?.let { preWarningMillis ->
+                if (preWarningMillis > System.currentTimeMillis()) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        preWarningMillis,
+                        createPreWarningPendingIntent(scheduledTap),
+                    )
+                }
+            }
             ScheduleResult.Scheduled(scheduledTap)
         }.getOrElse { throwable ->
             ScheduleResult.Failed(throwable.message ?: "Failed to schedule exact alarm.")
@@ -66,6 +76,7 @@ class ExactAlarmScheduler(context: Context) {
 
     fun cancel() {
         alarmManager?.cancel(createPendingIntent())
+        alarmManager?.cancel(createPreWarningPendingIntent())
     }
 
     private fun calculateNextTargetTapMillis(settings: AppSettings, afterMillis: Long): Long {
@@ -113,13 +124,31 @@ class ExactAlarmScheduler(context: Context) {
         )
     }
 
+    private fun createPreWarningPendingIntent(scheduledTap: ScheduledTap? = null): PendingIntent {
+        val intent = Intent(appContext, PreWarningReceiver::class.java).apply {
+            action = PreWarningReceiver.ACTION_PREWARNING
+            scheduledTap?.let { tap ->
+                putExtra(PreWarningReceiver.EXTRA_TARGET_PACKAGE, tap.targetPackage)
+            }
+        }
+
+        return PendingIntent.getBroadcast(
+            appContext,
+            REQUEST_CODE_PREWARNING,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
     companion object {
         const val ACTION_START_TAP_WINDOW = "com.reavann.miunlocker.action.START_TAP_WINDOW"
         const val EXTRA_TARGET_TAP_EPOCH_MILLIS = "targetTapEpochMillis"
         const val EXTRA_TARGET_PACKAGE = "targetPackage"
         const val PREPARATION_LEAD_MILLIS = 120_000L
+        const val PREWARNING_LEAD_MILLIS = 120_000L
 
         private const val REQUEST_CODE_DAILY_TAP = 2001
+        private const val REQUEST_CODE_PREWARNING = 2002
         private const val NANOS_PER_MILLI = 1_000_000
         private val BAKU_ZONE = ZoneId.of("Asia/Baku")
     }
